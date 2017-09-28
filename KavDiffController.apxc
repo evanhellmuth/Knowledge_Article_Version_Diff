@@ -1,0 +1,147 @@
+public with sharing class KavDiffController {
+    @AuraEnabled 
+    public static List<KnowledgeArticleVersion> getKAVs(String knowledgeArticleVersionId, String lang) {
+        String kavId = String.escapeSingleQuotes(knowledgeArticleVersionId);
+        String language = String.escapeSingleQuotes(lang);
+        List<KnowledgeArticleVersion> allVersions = new List<KnowledgeArticleVersion>();
+        
+        String kaId = [Select KnowledgeArticleId From KnowledgeArticleVersion Where Id=:kavId LIMIT 1].KnowledgeArticleId;
+        List<String> queries = getQueries(language, kaId);
+        
+        for (String query : queries) {
+            allVersions.addAll((List<KnowledgeArticleVersion>)Database.query(query));
+        }
+        
+        return allVersions;
+    }
+    
+    @TestVisible
+    private static List<String> getQueries(String language, String kaId) {
+        String draft = 'Draft';
+        String published = 'Online';
+        String archived = 'Archived';
+        
+        List<String> queries = new List<String>();
+        queries.add(buildQueryWithLanguagePubStatusKAId(language, draft, kaId));
+        queries.add(buildQueryWithLanguagePubStatusKAId(language, published, kaId));
+        queries.add(buildQueryWithLanguagePubStatusKAId(language, archived, kaId));
+        queries.add(buildArchivedQuery(language, kaId));
+        
+        return queries;
+    }
+    
+    @TestVisible
+    private static String buildQueryWithLanguagePubStatusKAId(String language, String pubStatus, String kaId) {
+        // note: language is expected to be in ISO code format... if it's not in that format when passed from Lightning
+        // we may need to do this conversion in the Apex
+        return 'SELECT Id,Title,PublishStatus,VersionNumber FROM KnowledgeArticleVersion WHERE Language=\'' + language + '\' AND PublishStatus=\'' + pubStatus + '\' AND KnowledgeArticleId=\'' + kaId + '\'';
+    }
+    
+    private static String buildArchivedQuery(String language, String kaId) {
+        return 'SELECT Id,Title,PublishStatus,VersionNumber FROM KnowledgeArticleVersion WHERE Language=\'' + language + '\' AND PublishStatus=\'Archived\' AND isLatestVersion=false AND KnowledgeArticleId=\'' + kaId + '\'';
+    }
+    
+    @AuraEnabled
+    public static List<Map<String, String>> getFields(String knowledgeArticleVersionId1, String knowledgeArticleVersionId2) {
+        String kavId1 = String.escapeSingleQuotes(knowledgeArticleVersionId1);
+        String kavId2 = String.escapeSingleQuotes(knowledgeArticleVersionId2);
+        List<Map<String, String>> results = new List<Map<String, String>>();
+        
+        Map<String, String> kav1FieldMap = getKAVFields(kavId1);
+        results.add(kav1FieldMap);
+        
+        Map<String, String> kav2FieldMap = getKAVFields(kavId2);
+        results.add(kav2FieldMap);
+        
+        return results;
+    }
+
+    @TestVisible
+    private static Map<String, String> getKAVFields(String kavId) {
+        Map<String, String> kavFields = new Map<String, String>();
+        String articleId = [Select KnowledgeArticleId From KnowledgeArticleVersion Where Id=:kavId].KnowledgeArticleId;
+        String concreteEntityName = getArticleTypeName(articleId);
+        
+        Map<String, Schema.SObjectField> fieldMap = getFieldMap(articleId);
+        
+        // for each field
+        for (String field : fieldMap.keySet()) {
+            String queryString = buildQueryString(fieldMap.get(field.toLowerCase()).getDescribe().getName(), concreteEntityName, kavId);
+            
+            //Schema.SObjectField f = fieldMap.get(field.toLowerCase());
+            Schema.DescribeFieldResult dfr = fieldMap.get(field.toLowerCase()).getDescribe();
+            
+            String fieldName = dfr.getLabel();
+            
+            // check FLS
+            if (dfr.isAccessible()) {
+          String fieldContents = String.valueOf(Database.query(queryString)[0].get(dfr.getName()));
+                if(fieldContents == null) {
+                    fieldContents = '';
+                }
+            kavFields.put(fieldName, fieldContents);
+      }
+            else {
+                //kavFields.put(fieldName, '');
+            }
+        }
+        
+        return kavFields;
+    }
+    
+  @TestVisible
+    private static String buildQueryString(String desiredField, String entity, String kavId) {
+        return 'SELECT ' + desiredField + ' FROM ' + entity + ' WHERE Id=\'' + kavId + '\'';
+    }
+    
+  @TestVisible
+    private static Map<String, Schema.SObjectField> getFieldMap(String articleId) {
+        Map<String, String> describeMap = new Map<String, String>();
+        Map<String, Schema.SObjectField> fieldMap = new Map<String, Schema.SObjectField>();
+        
+        String articlePrefix = articleId.substring(0,3);
+        
+        Map<String, Schema.SObjectType> gd = Schema.getGlobalDescribe();
+        Set<String> keySet = gd.keySet();
+        for (String key : keySet) {
+            Schema.SObjectType objectType = gd.get(key);
+            if (key.endsWith('__kav') && articlePrefix.equalsIgnoreCase(objectType.getDescribe().getKeyPrefix())) {
+                fieldMap = objectType.getDescribe().fields.getMap();
+                return fieldMap;
+            }
+        }
+        return fieldMap;
+    }
+    
+  @TestVisible
+    private static String getArticleTypeName(String articleId) {
+        Map<String, String> describeMap = getDescribeMap();
+        
+        String articlePrefix = articleId.substring(0,3);
+        Set<String> keySet = describeMap.keySet();
+        String articleType = null;
+        for(String key: keySet) {
+            if (articlePrefix.equalsIgnoreCase(key)) {
+                articleType = describeMap.get(key);
+                return articleType;
+            }
+        }
+        return articleType;
+    }
+    
+  @TestVisible
+    // Create describeMap holding just concrete Knowledge entities
+    private static Map<String, String> getDescribeMap() {
+        Map<String, String> describeMap = new Map<String, String>();
+        
+        Map<String, Schema.SObjectType> gd = Schema.getGlobalDescribe();
+        Set<String> keySet = gd.keySet();
+        for (String key : keySet) {
+            Schema.SObjectType objectType = gd.get(key);
+            if (key.endsWith('__kav')) {
+                describeMap.put(objectType.getDescribe().getKeyPrefix(), objectType.getDescribe().getName());
+            }
+        }
+        return describeMap;
+    }
+}

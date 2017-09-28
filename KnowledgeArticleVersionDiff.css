@@ -1,0 +1,21 @@
+.THIS .left {
+    display: inline-block;
+    vertical-align: top;
+    width: 16%;
+}
+
+.THIS .middle {
+    display: inline-block;
+    vertical-align: top;
+  width: 42%;
+}
+
+.THIS .right {
+    display: inline-block;
+    vertical-align: top;
+  width: 42%;
+}
+
+.THIS .spinnerContainer{
+    position: relative;
+}

@@ -1,0 +1,38 @@
+<aura:component controller="KavDiffController" implements="flexipage:availableForAllPageTypes,force:hasRecordId" access="global">
+    <aura:attribute name="versions" type="KnowledgeArticleVersion[]" />
+    <aura:attribute name="leftdiv" type="String" />
+    <aura:attribute name="middlediv" type="String" />
+    <aura:attribute name="rightdiv" type="String" />
+    <aura:attribute name="output" type="String" />
+    
+    <!--Using external library to compute diff -->
+    <ltng:require scripts="{!$Resource.diff_match_patch}" afterScriptsLoaded="{!c.init}"/>
+    
+    <!--Handlers-->
+    <aura:handler name="init" action="{!c.getVersions}" value="{!this}" />
+    
+    <!--Markup-->
+    <hr />
+    <h2><b>Select Article Versions To Compare</b></h2>
+    <lightning:select name="selectKav1" aura:id="selectKav1" label="Select Article Version 1" required="true">
+        <option text="Select Article Version"></option>
+        <aura:iteration items="{!v.versions}" var="k">
+            <option value="{!k.Id}" text="{!'Version ' + k.VersionNumber + ': ' + k.Title}"></option>
+        </aura:iteration>
+    </lightning:select>
+    
+    <lightning:select name="selectKav2" aura:id="selectKav2" label="Select Article Version 2" required="true">
+        <option text="Select Article Version"></option>
+        <aura:iteration items="{!v.versions}" var="k">
+            <option value="{!k.Id}" text="{!'Version ' + k.VersionNumber + ': ' + k.Title}"></option>
+        </aura:iteration>
+    </lightning:select>
+    <div class="spinnerContainer" style="position: relative;">
+         <lightning:spinner aura:id="spinner" class="spinner slds-hide" size="small"/>
+    </div>
+    <br/>
+  <lightning:button class="diffButton" label="Compute Diff" onclick="{!c.launch}"/>
+    <div class="slds-grid">
+        <ui:outputRichText value="{!v.output}" />
+    </div>
+</aura:component>
